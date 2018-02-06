@@ -10,7 +10,6 @@
 #define SWSERIAL_H_
 
 void init_sw_serial(int, int, long, int);
-void delay_usec(unsigned int);
 void sw_serial_putc(char c);
 void sw_serial_puts(char *str);
 

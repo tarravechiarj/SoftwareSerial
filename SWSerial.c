@@ -22,6 +22,7 @@ static char tx_bit;
 static char tx_low_mask;
 static char tx_high_mask;
 
+void delay_usec(unsigned int);
 static unsigned int get_bit_time(long baudrate);
 static char pin_to_port_bit(int pin);
 
@@ -61,7 +62,7 @@ void sw_serial_putc(char c) {
 	delay_usec(bit_time);
 }
 
-/* Transmit each char in str, including terminating null.
+/* Transmit each char in str, excluding terminating null.
  */
 void sw_serial_puts(char *str) {
 	char c;
@@ -69,8 +70,6 @@ void sw_serial_puts(char *str) {
 	while ((c = *str++)) {
 		sw_serial_putc(c);
 	}
-	
-	sw_serial_putc(0x0);
 }
 
 /* Return the reciprocal of the baudrate, converted to usecs.
