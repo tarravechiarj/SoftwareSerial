@@ -6,6 +6,7 @@
  */ 
 
 #include <avr/io.h>
+#include "EmSys.h"
 #include "SWSerial.h"
 
 /* pin numbers for transmit and receive pins */
@@ -22,9 +23,15 @@ static char tx_bit;
 static char tx_low_mask;
 static char tx_high_mask;
 
+/* framing parameters */
+static char data_bits;
+static char parity;
+static char stop_bits;
+
 void delay_usec(unsigned int);
-static unsigned int get_bit_time(long baudrate);
-static char pin_to_port_bit(int pin);
+static unsigned int get_bit_time(long);
+static char pin_to_port_bit(int);
+static char compute_parity_bit(char);
 
 /* set receive/transmit pins and transmission parameters
  */
@@ -39,27 +46,43 @@ void init_sw_serial(int rxPin, int txPin, long baud, int frame) {
 	tx_bit = pin_to_port_bit(tx_pin);
 	tx_high_mask = 1 << tx_bit;
 	tx_low_mask = ~tx_high_mask;
-	
 	DDRB |= (1 << tx_bit);
+	
+	data_bits = ((frame & 0x7) >> DATABITS) + 5;
+	parity = frame >> PARITYBITS;
+	stop_bits = (frame >> STOPBITS) & 1;
 }
 
-/* Transmit a char using TTL serial transmission
+/* Transmit a char in a data frame using TTL serial transmission
  */
 void sw_serial_putc(char c) {
 	char curr_bit;
+	char parity_bit = compute_parity_bit(c);
 
-	PORTB &= tx_low_mask;    // Start bit
-	delay_usec(bit_time);
+	/* transmit start bit */
+	PORTB &= tx_low_mask;   
 	
-	for (int i = 0; i < 8; i++) {
+	/* transmit data bits */
+	for (int i = 0; i < data_bits; i++) {
+		delay_usec(bit_time - 2);
 		curr_bit = (c >> i) & 1;
 		PORTB &= tx_low_mask;
 		PORTB |= curr_bit << tx_bit;
+	}
+	
+	/* transmit 0 or 1 parity bits */
+	delay_usec(bit_time);
+	if (parity) {
+		PORTB &= tx_low_mask;
+		PORTB |= parity_bit << tx_bit;
 		delay_usec(bit_time);
 	}
-
-	PORTB |= tx_high_mask;    // Stop bit
-	delay_usec(bit_time);
+	
+	/* transmit 1 or 2 stop bits */
+	do {
+		PORTB |= tx_high_mask;
+		delay_usec(bit_time);
+	} while (stop_bits--);  
 }
 
 /* Transmit each char in str, excluding terminating null.
@@ -120,4 +143,16 @@ static char pin_to_port_bit(int pin) {
 	}
 }
 
-
+/* Compute parity bit by XORing each bit of c and parity parameter.
+ */
+static char compute_parity_bit(char c) {
+	char curr_bit;
+	char parity_bit = parity & 1;
+	
+	for (int i = 0; i < 8; i++) {
+		curr_bit = (c >> i) & 1;
+		parity_bit ^= curr_bit;
+	}
+	
+	return parity_bit;
+}
