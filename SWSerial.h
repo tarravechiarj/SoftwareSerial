@@ -12,6 +12,7 @@
 void init_sw_serial(int, int, long, int);
 void sw_serial_putc(char c);
 void sw_serial_puts(char *str);
+char sw_serial_getc(void);
 
 
 #endif /* SWSERIAL_H_ */

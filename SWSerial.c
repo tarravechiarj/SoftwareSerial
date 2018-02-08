@@ -23,6 +23,10 @@ static char tx_bit;
 static char tx_low_mask;
 static char tx_high_mask;
 
+/* bit corresponding to receive pin and a mask to read it */
+static char rx_bit;
+static char rx_mask;
+
 /* framing parameters */
 static char data_bits;
 static char parity;
@@ -47,6 +51,10 @@ void init_sw_serial(int rxPin, int txPin, long baud, int frame) {
 	tx_high_mask = 1 << tx_bit;
 	tx_low_mask = ~tx_high_mask;
 	DDRB |= (1 << tx_bit);
+
+	rx_bit = pin_to_port_bit(rx_pin);
+	rx_mask = 1 << rx_bit;
+	DDRB &= ~(1 << rx_bit);
 	
 	data_bits = ((frame & 0x7) >> DATABITS) + 5;
 	parity = frame >> PARITYBITS;
@@ -57,14 +65,14 @@ void init_sw_serial(int rxPin, int txPin, long baud, int frame) {
  */
 void sw_serial_putc(char c) {
 	char curr_bit;
-	char parity_bit = compute_parity_bit(c);
+	char parity_bit;
 
 	/* transmit start bit */
 	PORTB &= tx_low_mask;   
 	
 	/* transmit data bits */
 	for (int i = 0; i < data_bits; i++) {
-		delay_usec(bit_time - 2);
+		delay_usec(bit_time - 2);	
 		curr_bit = (c >> i) & 1;
 		PORTB &= tx_low_mask;
 		PORTB |= curr_bit << tx_bit;
@@ -73,9 +81,10 @@ void sw_serial_putc(char c) {
 	/* transmit 0 or 1 parity bits */
 	delay_usec(bit_time);
 	if (parity) {
+		parity_bit = compute_parity_bit(c);
 		PORTB &= tx_low_mask;
 		PORTB |= parity_bit << tx_bit;
-		delay_usec(bit_time);
+		delay_usec(bit_time - 17);
 	}
 	
 	/* transmit 1 or 2 stop bits */
@@ -83,6 +92,37 @@ void sw_serial_putc(char c) {
 		PORTB |= tx_high_mask;
 		delay_usec(bit_time);
 	} while (stop_bits--);  
+}
+
+/* Read a char from a data frame using TTL serial transmission
+ */
+char sw_serial_getc(void) {
+	char curr_bit;
+	char c = 0;
+
+	/* wait until start bit is read and delay half a bit time before reading */
+	while (PINB & rx_mask) delay_usec(1);
+	delay_usec(bit_time >> 1);
+
+	/* read data bits */
+	for (int i = 0; i < data_bits; i++) {
+		delay_usec(bit_time - 2);
+		curr_bit = (PINB & rx_mask) >> rx_bit;
+		c |= curr_bit << i;
+	}
+	delay_usec(bit_time >> 1);
+
+	/* wait for parity bit */
+	if (parity) {
+		delay_usec(bit_time);
+	}
+
+	/* wait for  1 or 2 stop bits */
+	do {
+		delay_usec(bit_time);
+	} while (stop_bits--); 
+
+	return c;
 }
 
 /* Transmit each char in str, excluding terminating null.
